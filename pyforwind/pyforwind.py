@@ -4,7 +4,7 @@
 An open source package to generate synthetic IEC wind 
 fields with extended turbulence characteristics 
 url="https://github.com/fiddir/pyforwind"
-license="MIT license"
+license="LGPL license"
 """
 
 import matplotlib                                                                                                                                                                                                                                                                                                                                               
@@ -16,12 +16,14 @@ from matplotlib import pyplot as plt
 from scipy.misc import derivative
 import pandas as pd
 import logging
+import tensorflow as tf
 
 class SWF:
-    def __init__(self, H, L, L_c, mu, dy, dz, y_i, y_e, z_i, z_e, T, tilde_T, N_x, N_y, N_z, N_xi, V_hub, sigma=None): 
+    def __init__(self, H, L, L_c, tilde_L, mu, dy, dz, y_i, y_e, z_i, z_e, T, tilde_T, N_x, N_y, N_z, N_xi, V_hub, sigma=None): 
         self.H = H
         self.L = L
         self.L_c = L_c
+        self.tilde_L = tilde_L
         self.mu = mu
         self.dy = dy
         self.dz = dz
@@ -53,48 +55,54 @@ class SWF:
     
     def kaimal_spec(self, F):
         return 4.*self.sigma**2*self.L/(1.+6.*F*self.L/self.V_hub)**(1.+2.*self.H)/self.V_hub
-    
-    def kaimal_coh(self, F):
-        return np.exp(-12.*self.R_ij*np.sqrt((F/self.V_hub)**2+(0.12/self.L_c)**2))
-    
+
+    def kaimal_coh(self, F, R):
+        return np.exp(-12.*R*np.sqrt((F/self.V_hub)**2+(0.12/self.L_c)**2))
+
     def cov(self):
         kaimal_spec_vec = np.vectorize(self.kaimal_spec)
         return np.fft.irfft(kaimal_spec_vec(self.f))[:self.N_x//2]
 
     def rescaled_spec(self, xi):
         T_rescaled = np.array(xi**np.sqrt(self.mu*np.log(self.tilde_T/(self.t)))*(self.t/self.tilde_T)**(self.mu/2)*self.t)
-        rescaled_int = np.array(T_rescaled/self.dt, dtype='int')    
+        rescaled_int = np.array(T_rescaled/self.dt, dtype='int')
         if rescaled_int.max() < self.N_x//2-1:
-            df = pd.DataFrame({'corr' : self.cov()[rescaled_int]})  
+            df = pd.DataFrame({'corr' : self.cov()[rescaled_int]})
             df[df.duplicated()]  = None
             cov_rescaled = df.interpolate(method='linear')
         else:
             cov = self.cov()
             rescaled_tilde = rescaled_int[rescaled_int<self.N_x//2]
             cov_rescaled = np.append(cov[rescaled_tilde], cov[rescaled_tilde][-1]*np.ones(self.N_x//2-rescaled_tilde.size+1))
-        rescaled_spec = np.fft.rfft(np.append(cov_rescaled, cov_rescaled[::-1][1:]))  
-        return rescaled_spec  
-    
+        rescaled_spec = np.fft.rfft(np.append(cov_rescaled, cov_rescaled[::-1][1:]))
+        return rescaled_spec
+
     def gauss_field(self, seed):
         np.random.seed(seed)
         random_phases = np.exp(1j*np.random.random_sample((self.N_y*self.N_y, self.N_x//2+1))*2*np.pi)
         u_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
         for ff in range(1, self.N_x//2+1):
-            coh_decomp = np.linalg.cholesky(self.kaimal_coh(self.f[ff]))
+            coh_decomp = np.linalg.cholesky(self.kaimal_coh(self.f[ff], self.R_ij))
             u_hat[:,ff] = coh_decomp*np.sqrt(self.kaimal_spec(self.f[ff]))@random_phases[:, ff]
-        u = np.fft.irfft(u_hat, axis=1)
-        return u.reshape(self.N_y, self.N_y, self.N_x)
+        u = np.fft.irfft(u_hat, axis=1).reshape(self.N_y, self.N_y, self.N_x)
+        return u/np.std(u)
     
     def mask_field(self):
         random_phases = np.exp(1j*np.random.random_sample((self.N_y*self.N_y, self.N_x//2+1))*2*np.pi)
-        u_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
+        mask_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
         for ff in range(1, self.N_x//2+1):
-            coh_decomp = np.linalg.cholesky(self.kaimal_coh(self.f[ff]))
-            u_hat[:,ff] = coh_decomp*np.sqrt(self.kaimal_spec(self.f[ff]))@random_phases[:, ff]
-        u = np.fft.irfft(u_hat, axis=1)
-        return u.reshape(self.N_y, self.N_y, self.N_x)
-
-    def field(self, seed):
+            coh_decomp = scipy.linalg.cholesky(self.kaimal_coh(self.f[ff], self.R_ij), overwrite_a=True, check_finite=False)
+            mask_hat[:,ff] = coh_decomp*np.sqrt(self.kaimal_spec(self.f[ff]))@random_phases[:, ff]
+        mask = np.fft.irfft(mask_hat, axis=1).reshape(self.N_y, self.N_y, self.N_x)
+        mask /= np.std(mask)
+        mask = 1./2*(1.+sc.erf(mask/np.sqrt(2)))                                                                                           
+        mask -= mask.min()
+        mask /= mask.max()
+        mask *= (self.N_xi-1)
+        mask = mask.astype(int)  
+        return mask
+    
+    def temporal_field(self, seed):
         np.random.seed(seed)
         random_phases = np.exp(1j*np.random.random_sample((self.N_y*self.N_y, self.N_x//2+1))*2*np.pi)
         u_field = np.zeros((self.N_xi, self.N_y, self.N_y, self.N_x))
@@ -102,27 +110,38 @@ class SWF:
         xi_array = np.sort(np.random.lognormal(0, 1, self.N_xi))
         for xx in range(self.N_xi):
             xi = xi_array[xx]
-            print('xi_values', xi)
             u_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
             spec = self.rescaled_spec(xi)
             for ff in range(1,self.N_x//2+1):
-                coh_decomp = np.linalg.cholesky(self.kaimal_coh(self.f[ff]))
+                coh_decomp = np.linalg.cholesky(self.kaimal_coh(self.f[ff], self.R_ij))
                 u_hat[:, ff] = coh_decomp*np.sqrt(spec[ff])@random_phases[:, ff]
             u_field[xx] = np.fft.irfft(u_hat, axis=1).reshape(self.N_y, self.N_y, self.N_x)
         mask = self.mask_field()
-        mask /= np.std(mask)
-        mask = 1./2*(1.+sc.erf(mask/np.sqrt(2)))                                                                                           
-        mask -= mask.min()
-        mask /= mask.max()
-        mask *= (self.N_xi-1)
-        mask = mask.astype(int)  
-        for xx in range(self.N_y):
+        for zz in range(self.N_y):
             for yy in range(self.N_y):
-                for zz in range(self.N_x):
-                    u[xx, yy, zz] = u_field[mask[xx, yy, zz], xx, yy, zz]
-        f = open('field_seed_'+str(seed)+'.log', "x")
-        f.write(str(list(self.__dict__)[:14]))
-        f.write(str(list(self.__dict__.values())[:14]))
-        f.close()
-        return u, mask
+                for xx in range(self.N_x):
+                    u[zz, yy, xx] = u_field[mask[zz, yy, xx], zz, yy, xx]
+        return u/np.std(u), mask
+    
+    def spatiotemporal_field(self, seed):
+        np.random.seed(seed)
+        random_phases = np.exp(1j*np.random.random_sample((self.N_y*self.N_y, self.N_x//2+1))*2*np.pi)
+        u_field = np.zeros((self.N_xi, self.N_y, self.N_y, self.N_x))
+        u = np.zeros((self.N_y, self.N_y, self.N_x))
+        xi_array = np.sort(np.random.lognormal(0, 1, self.N_xi))
+        for xx in range(self.N_xi):
+            xi = xi_array[xx]
+            R_rescaled = np.where(self.R_ij==0, 0, np.array(xi**np.sqrt(self.mu*np.log(self.tilde_L/(self.R_ij)))*(self.R_ij/self.tilde_L)**(self.mu/2)*self.R_ij))
+            u_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
+            spec = self.rescaled_spec(xi)
+            for ff in range(1,self.N_x//2+1):
+                coh_decomp = np.linalg.cholesky(self.kaimal_coh(self.f[ff], R_rescaled))
+                u_hat[:, ff] = coh_decomp*np.sqrt(spec[ff])@random_phases[:, ff]
+            u_field[xx] = np.fft.irfft(u_hat, axis=1).reshape(self.N_y, self.N_y, self.N_x)
+        mask = self.mask_field()
+        for zz in range(self.N_y):
+            for yy in range(self.N_y):
+                for xx in range(self.N_x):
+                    u[zz, yy, xx] = u_field[mask[zz, yy, xx], zz, yy, xx]
+        return u/np.std(u), mask
     
