@@ -64,7 +64,7 @@ class SWF:
         If True, longitudinal, lateral, and upward Kaimal wind field components will be generated. 
     """
 
-    def __init__(self, L_int, mu,  V_hub, range, dim, kind='spatiotemporal', 
+    def __init__(self, L, mu,  V_hub, range, dim, kind='spatiotemporal', 
                  H=None, L_c=None, tilde_L=None,  tilde_T=None, sigma=None, N_xi=None, full_vector=False): 
         """ Initializes the wind field class."""
         if H is None:
@@ -72,10 +72,10 @@ class SWF:
         else:
             self.H = H
         
-        self.L_int = L_int
+        self.L = L
 
         if L_c is None:
-            self.L_c = L_int
+            self.L_c = L
         else:
             self.L_c = L_c
 
@@ -295,10 +295,10 @@ class SWF:
         else:
             np.random.seed(seed)
 
-        u = self.field_type(self.L_int, self.sigma)+self.V_hub
+        u = self.field_type(self.L, self.sigma)+self.V_hub
         if self.full_vector is True:
-            v = self.field_type(2.7*self.L_int/8.1, 0.8*self.sigma)
-            w = self.field_type(0.66*self.L_int/8.1, 0.5*self.sigma)
+            v = self.field_type(2.7*self.L/8.1, 0.8*self.sigma)
+            w = self.field_type(0.66*self.L/8.1, 0.5*self.sigma)
             u = np.array([u, v, w]) 
         return u   
    
