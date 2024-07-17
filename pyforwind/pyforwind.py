@@ -1,20 +1,20 @@
 """
 An open source package to generate synthetic IEC wind 
 fields with extended turbulence characteristics 
-url="https://github.com/fiddir/pyforwind"
-license="LGPL license"
+
 """
 
-import matplotlib                                                                                                                                                                                                                                                                                                                                               
+#Copyright (C) 2024 GNU LGPLv3, pyforwind 2024, J. Friedrich, D. Moreno, and J. Lengyel.
+#All rights reserved.
+#Contact: jan.friedrich@uni-oldenburg.de, aura.daniela.moreno.mora@uol.de, janka.lengyel@uol.de
+                                                                                                                                                                                                                                                                                                                                             
 import numpy as np
 import math                                                                                                                                                                                                                                                                                                                                                   
 import scipy                                                                                                                                                                   
 import scipy.special as sc
-from matplotlib import pyplot as plt
 from scipy.misc import derivative
 import pandas as pd
 import logging
-import tensorflow as tf
 
 class SWF:
     """
@@ -65,7 +65,7 @@ class SWF:
     """
 
     def __init__(self, L_int, mu,  V_hub, range, dim, kind='spatiotemporal', 
-                 H=None, L_c=None, tilde_L=None,  tilde_T=None, sigma=None, N_xi=None, full_vector=False): 
+                 H=None, L_c=None, tilde_L=None,  tilde_T=None, sigma=None, N_xi=None, full_vector=False, corr_spec=False): 
         """ Initializes the wind field class."""
         if H is None:
             self.H = 1./3.
@@ -117,6 +117,7 @@ class SWF:
 
         self.kind = kind
         self.full_vector = full_vector
+        self.corr_spec = corr_spec
         self.dt = self.T/self.N_x
         self.t = np.linspace(self.dt, self.dt*(self.N_x/2), self.N_x//2+1)
         self.Fs = self.N_x/self.T                                                                                                                                                                                                                                                                                  
@@ -142,7 +143,7 @@ class SWF:
         kaimal_spec_vec = np.vectorize(self.kaimal_spec)
         return np.fft.irfft(kaimal_spec_vec(self.f, L, sigma))[:self.N_x//2]
 
-    def rescaled_spec(self, L, sigma, xi):
+    def rescaled_spec(self, xi, L, sigma):
         """ Modify/re-scale the Kaimal frequency spectrum 
 
         Parameters
@@ -204,7 +205,7 @@ class SWF:
         u -= np.mean(u[self.N_hub, self.N_hub, :])
         return u
     
-    def mask_field(self):
+    def mask_field(self, L, sigma):
         """ Integer mask field for generation of Gaussian scale mixture. """
         random_phases = np.exp(1j*np.random.random_sample((self.N_y*self.N_y, self.N_x//2+1))*2*np.pi)
         mask_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
@@ -264,17 +265,48 @@ class SWF:
                 coh_decomp = np.linalg.cholesky(self.kaimal_coh(self.f[ff], R))
                 u_hat[:, ff] = coh_decomp*np.sqrt(spec[ff])@random_phases[:, ff]
             u_field[xx] = np.fft.irfft(u_hat, axis=1).reshape(self.N_y, self.N_y, self.N_x)
-        mask = self.mask_field()
+        mask = self.mask_field(L, sigma)
         for zz in range(self.N_y):
             for yy in range(self.N_y):
                 for xx in range(self.N_x):
                     u[zz, yy, xx] = u_field[mask[zz, yy, xx], zz, yy, xx]
+        if self.corr_spec is True:
+            u = self.corrected_spec(u, random_phases, L, sigma)
+
         u *= sigma/np.std(u[self.N_hub, self.N_hub, :])
         u -= np.mean(u[self.N_hub, self.N_hub, :])
         return u
+    
+    def corrected_spec(self, u, random_phases, L, sigma):
+        """ Correction of energy spectrum of non-Gaussian wind field.
+
+        Parameters
+        ----------
+        u : array
+            Initial non-Gaussian wind field.
+        random_phases: array
+            Random-phases of wind field. 
+        seed : int
+            Initial seed for calculation of corresponding Gauss field.
+        Returns
+        -------
+        u_corrected : array
+            Returns a wind field with spectra identical to original Kaimal of size (N_rotor, N_rotor, N_T) 
+        """
+
+        u_gauss_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
+        for ff in range(1, self.N_x//2+1):
+            coh_decomp = np.linalg.cholesky(self.kaimal_coh(self.f[ff], self.R_ij))
+            u_gauss_hat[:,ff] = coh_decomp*np.sqrt(self.kaimal_spec(self.f[ff], L, sigma))@random_phases[:, ff]
+        u_gauss = np.fft.irfft(u_gauss_hat, axis=1).reshape(self.N_y, self.N_y, self.N_x)
+        u_int_hat = np.fft.fftshift(np.fft.rfftn(u),axes=(0,1))
+        u_gauss_hat = np.fft.fftshift(np.fft.rfftn(u_gauss),axes=(0,1))
+        u_int_hat *= np.sqrt(np.abs(u_gauss_hat)**2/np.abs(u_int_hat)**2)
+        u_corrected = np.fft.irfftn(np.fft.ifftshift(u_int_hat,axes=(0,1)))
+        return u_corrected
 
     def field(self, seed=None):
-        """ Final call for wind field
+        """ Final call for wind field.
 
         Parameters
         ----------
@@ -294,7 +326,6 @@ class SWF:
             np.random.seed()
         else:
             np.random.seed(seed)
-
         u = self.field_type(self.L_int, self.sigma)+self.V_hub
         if self.full_vector is True:
             v = self.field_type(2.7*self.L_int/8.1, 0.8*self.sigma)
