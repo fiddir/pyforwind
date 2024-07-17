@@ -142,7 +142,7 @@ class SWF:
         kaimal_spec_vec = np.vectorize(self.kaimal_spec)
         return np.fft.irfft(kaimal_spec_vec(self.f, L, sigma))[:self.N_x//2]
 
-    def rescaled_spec(self, L, sigma, xi):
+    def rescaled_spec(self, xi, L, sigma):
         """ Modify/re-scale the Kaimal frequency spectrum 
 
         Parameters
@@ -204,7 +204,7 @@ class SWF:
         u -= np.mean(u[self.N_hub, self.N_hub, :])
         return u
     
-    def mask_field(self):
+    def mask_field(self, L, sigma):
         """ Integer mask field for generation of Gaussian scale mixture. """
         random_phases = np.exp(1j*np.random.random_sample((self.N_y*self.N_y, self.N_x//2+1))*2*np.pi)
         mask_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
