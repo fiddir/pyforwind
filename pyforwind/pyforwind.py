@@ -8,13 +8,13 @@ fields with extended turbulence characteristics
 #All rights reserved.
 #Contact: jan.friedrich@uni-oldenburg.de, aura.daniela.moreno.mora@uol.de, janka.lengyel@uol.de
                                                                                                                                                                                                                                                                                                                                              
-import numpy as np
-import math                                                                                                                                                                                                                                                                                                                                                   
+import numpy as np                                                                                                                                                                                                                                                                                                                                                 
 import scipy                                                                                                                                                                   
 import scipy.special as sc
-from scipy.misc import derivative
 import pandas as pd
 import logging
+import datetime
+import time
 
 class SWF:
     """
@@ -34,6 +34,7 @@ class SWF:
         Intermittency coefficient that determines deviations from Gaussianity of wind field
         fluctuations.
     V_hub: Wind speed at rotor hub.
+    h_hub: Hub height.
     range : (float, float)
         Length scales of wind field in the form (T, diam) where T is the temporal length of wind field
         and diam the extends in the rotor plane.
@@ -62,17 +63,30 @@ class SWF:
         (convergence check might be appropriate)
     full_vector: 
         If True, longitudinal, lateral, and upward Kaimal wind field components will be generated. 
+    log:
+        Write parameter list to .info file and logging.
     """
 
-    def __init__(self, L_int, mu,  V_hub, range, dim, kind='spatiotemporal', 
-                 H=None, L_c=None, tilde_L=None,  tilde_T=None, sigma=None, N_xi=None, full_vector=False, corr_spec=False): 
+    def __init__(self, L_int, mu,  V_hub, h_hub, range, dim, kind='spatiotemporal', 
+                 H=None, L_c=None, tilde_L=None,  tilde_T=None, sigma=None, N_xi=None, 
+                 full_vector=False, corr_spec=False, log=False): 
         """ Initializes the wind field class."""
         if H is None:
             self.H = 1./3.
         else:
             self.H = H
+
+        if sigma is None:
+            sigma = 0.1*V_hub
         
-        self.L_int = L_int
+        if full_vector is True:
+            self.n_comp = 3
+            self.L_int = np.array([L_int, 2.7*L_int/8.1, 0.66*L_int/8.1])
+            self.sigma = np.array([sigma, 0.8*sigma, 0.5*sigma])
+        else:
+            self.n_comp = 1
+            self.L_int = np.array([L_int, np.nan, np.nan])
+            self.sigma = np.array([sigma, np.nan, np.nan])
 
         if L_c is None:
             self.L_c = L_int
@@ -81,6 +95,7 @@ class SWF:
 
         self.mu = mu
         self.V_hub = V_hub
+        self.h_hub = h_hub
         self.T = range[0]
         if tilde_T is None:
             self.tilde_T = self.T
@@ -100,16 +115,12 @@ class SWF:
         else:
             self.N_xi = N_xi
     
-        self.y = self.z = np.linspace(-range[1]/2., range[1]/2., self.N_y)
-        self.N_hub = (self.N_y-1)//2
+        self.y = np.linspace(-range[1]/2., range[1]/2., self.N_y)
+        self.z = np.linspace(-range[1]/2.+self.h_hub, range[1]/2.+self.h_hub, self.N_z)
+        self.N_hub = (self.N_z-1)//2
         if self.y[self.N_hub] != 0.:
-            raise ValueError("the grid in the rotor plane must contain the rotor hub (0,0).") 
+            raise ValueError("the grid in the rotor plane must contain the rotor hub.") 
     
-        if sigma is None:
-            self.sigma = 0.1*self.V_hub
-        else:
-            self.sigma = sigma
-        
         if kind == 'gauss':
             self.field_type = self.gauss_field
         else:
@@ -117,7 +128,10 @@ class SWF:
 
         self.kind = kind
         self.full_vector = full_vector
+        self.range = range
+        self.dim = dim
         self.corr_spec = corr_spec
+        self.log = log
         self.dt = self.T/self.N_x
         self.t = np.linspace(self.dt, self.dt*(self.N_x/2), self.N_x//2+1)
         self.Fs = self.N_x/self.T                                                                                                                                                                                                                                                                                  
@@ -125,6 +139,9 @@ class SWF:
         self.Y, self.Z = np.meshgrid(self.y, self.z)   
         self.positions = np.vstack([self.Y.ravel(), self.Z.ravel()]).T
         self.R_ij = scipy.spatial.distance.cdist(self.positions, self.positions, 'euclidean')
+
+        if log is True:
+            self.logger()
     
     def get_positions(self):
         """ Returns the positions of grid points in the rotor plane. """
@@ -256,7 +273,8 @@ class SWF:
             u_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
             if self.kind in ['spatial', 'spatiotemporal']:
                 with np.errstate(divide='ignore'):
-                    R = np.where(self.R_ij==0., 0., np.array(xi**np.sqrt(self.mu*np.log(self.tilde_L/(self.R_ij)))*(self.R_ij/self.tilde_L)**(self.mu/2)*self.R_ij))
+                    R = np.where(self.R_ij==0., 0., np.array(xi**np.sqrt(self.mu*np.log(self.tilde_L/(self.R_ij)))
+                                                             *(self.R_ij/self.tilde_L)**(self.mu/2)*self.R_ij))
 
             if self.kind in ['temporal', 'spatiotemporal']:
                 spec = self.rescaled_spec(xi, L, sigma)
@@ -324,12 +342,32 @@ class SWF:
 
         if seed is None:
             np.random.seed()
+            if self.log is True:
+                raise ValueError("No seed given for log-file.") 
         else:
             np.random.seed(seed)
-        u = self.field_type(self.L_int, self.sigma)+self.V_hub
+            if self.log is True:
+                logging.info(f"Generating wind field with seed: {seed}")
+            u = self.field_type(self.L_int[0], self.sigma[0])+self.V_hub
         if self.full_vector is True:
-            v = self.field_type(2.7*self.L_int/8.1, 0.8*self.sigma)
-            w = self.field_type(0.66*self.L_int/8.1, 0.5*self.sigma)
-            u = np.array([u, v, w]) 
+            v = self.field_type(self.L_int[1], self.sigma[1])
+            w = self.field_type(self.L_int[2], self.sigma[2])
+            u = np.array([u, v, w])
         return u   
+    
+    def logger(self):
+        """ Initialize a log-file and write wind field model parameters to .info-file."""
+
+        logging.basicConfig(filename=str(self.kind)+'.log', format='%(asctime)s %(levelname)s %(message)s',
+                            filemode='w', level=logging.INFO, force=True)
+        logging.info('Instantiating SWF with parameters saved in: '+str(self.kind)+'.info') 
+
+        params = np.round(np.array([[self.L_int[0], self.L_int[1], self.L_int[2], self.sigma[0], self.sigma[1], 
+                                     self.sigma[2], self.mu, self.V_hub, self.H, self.T, self.range[1], self.dim[0], 
+                                     self.dim[1], self.n_comp, self.tilde_L, self.tilde_T, self.N_xi]]),3)
+        params_str = ['L_int_x', 'L_int_y', 'L_int_z', 'sigma_x', 'sigma_y', 'sigma_z', 'mu', 'V_hub', 
+                      'H', 'T', 'diameter', 'N_T', 'N_rotor', 'N_dim', 'tilde_L', 'tilde_T', 'N_xi']
+        df = pd.DataFrame(params, columns=params_str)
+        df.to_csv(str(self.kind)+'.info', index=False)  
+
    
