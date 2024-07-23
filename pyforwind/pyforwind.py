@@ -15,7 +15,7 @@ import pandas as pd
 import logging
 import datetime
 import time
-import matplotlib.pyplot as plt
+import timeit
 
 class SWF:
     """
@@ -237,7 +237,7 @@ class SWF:
         random_phases = np.exp(1j*np.random.random_sample((self.N_y*self.N_y, self.N_x//2+1))*2*np.pi)
         mask_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
         for ff in range(1, self.N_x//2+1):
-            coh_decomp = scipy.linalg.cholesky(self.kaimal_coh(self.f[ff], self.R_ij), overwrite_a=True, check_finite=False)
+            coh_decomp = np.linalg.cholesky(self.kaimal_coh(self.f[ff], self.R_ij))
             mask_hat[:,ff] = coh_decomp*np.sqrt(self.kaimal_spec(self.f[ff], L, sigma))@random_phases[:, ff]
         mask = np.fft.irfft(mask_hat, axis=1).reshape(self.N_y, self.N_y, self.N_x)
         mask /= np.std(mask)
@@ -277,15 +277,13 @@ class SWF:
         
         if self.kind in ['temporal']:
             R = self.R_ij
-        
+        u_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
         for xx in range(self.N_xi):
             xi = xi_array[xx]
-            u_hat = np.zeros((self.N_y*self.N_y, self.N_x//2+1), dtype='complex')
             if self.kind in ['spatial', 'spatiotemporal']:
                 with np.errstate(divide='ignore'):
                     R = np.where(self.R_ij==0., 0., np.array(xi**np.sqrt(self.mu*np.log(self.tilde_L/(self.R_ij)))
                                                              *(self.R_ij/self.tilde_L)**(self.mu/2)*self.R_ij))
-
             if self.kind in ['temporal', 'spatiotemporal']:
                 spec = self.rescaled_spec(xi, L, sigma)
 
