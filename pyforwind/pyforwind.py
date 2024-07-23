@@ -15,6 +15,7 @@ import pandas as pd
 import logging
 import datetime
 import time
+import matplotlib.pyplot as plt
 
 class SWF:
     """
@@ -67,11 +68,13 @@ class SWF:
         If True, longitudinal, lateral, and upward Kaimal wind field components will be generated. 
     log:
         Write parameter list to .info file and logging.
+    save: 
+        Save wind field.
     """
 
     def __init__(self, L_int, mu,  V_hub, h_hub, range, dim, kind='spatiotemporal', 
                  H=None, L_c=None, tilde_L=None,  tilde_T=None, sigma=None, N_xi=None, 
-                 full_vector=False, corr_spec=False, log=False): 
+                 full_vector=False, corr_spec=False, log=False, save=False): 
         """ Initializes the wind field class."""
         if H is None:
             self.H = 1./3.
@@ -130,12 +133,13 @@ class SWF:
 
         self.kind = kind
         self.full_vector = full_vector
+        self.save = save
         self.range = range
         self.dim = dim
         self.corr_spec = corr_spec
         self.log = log
         self.dt = self.T/self.N_x
-        self.t = np.linspace(self.dt, self.dt*(self.N_x/2), self.N_x//2+1)
+        self.t = np.linspace(0, self.dt*(self.N_x/2), self.N_x//2+1)
         self.Fs = self.N_x/self.T                                                                                                                                                                                                                                                                                  
         self.f = np.linspace(self.df, 0.5*self.Fs, self.N_x//2+1)
         self.Y, self.Z = np.meshgrid(self.y, self.z)   
@@ -144,6 +148,9 @@ class SWF:
 
         if log is True:
             self.logger()
+        else:
+            if save in ['npy', 'bin']:
+                raise ValueError("No seed given for log-file.") 
     
     def get_positions(self):
         """ Returns the positions of grid points in the rotor plane. """
@@ -182,7 +189,8 @@ class SWF:
             re-scaled spectrum.
         """
 
-        T_rescaled = np.array(xi**np.sqrt(self.mu*np.log(self.tilde_T/(self.t)))*(self.t/self.tilde_T)**(self.mu/2)*self.t)
+        T_rescaled = np.where(self.t==0., 0.,  np.array(xi**np.sqrt(self.mu*np.log(self.tilde_T/(self.t)))
+                                                        *(self.t/self.tilde_T)**(self.mu/2)*self.t))
         rescaled_int = np.array(T_rescaled/self.dt, dtype='int')
         if rescaled_int.max() < self.N_x//2-1:
             df = pd.DataFrame({'corr' : self.cov(L, sigma)[rescaled_int]})
@@ -193,7 +201,7 @@ class SWF:
             rescaled_tilde = rescaled_int[rescaled_int<self.N_x//2]
             cov_rescaled = np.append(cov[rescaled_tilde], cov[rescaled_tilde][-1]*np.ones(self.N_x//2-rescaled_tilde.size+1))
         
-        rescaled_spec = np.fft.rfft(np.append(cov_rescaled, cov_rescaled[::-1][1:]))
+        rescaled_spec = np.fft.rfft(np.append(cov_rescaled, cov_rescaled[::-1][:-1]))
         return rescaled_spec
 
     def gauss_field(self, L, sigma):
@@ -280,7 +288,7 @@ class SWF:
 
             if self.kind in ['temporal', 'spatiotemporal']:
                 spec = self.rescaled_spec(xi, L, sigma)
-            
+
             for ff in range(1,self.N_x//2+1):
                 coh_decomp = np.linalg.cholesky(self.kaimal_coh(self.f[ff], R))
                 u_hat[:, ff] = coh_decomp*np.sqrt(spec[ff])@random_phases[:, ff]
@@ -346,6 +354,8 @@ class SWF:
             np.random.seed()
             if self.log is True:
                 raise ValueError("No seed given for log-file.") 
+            if self.save is True:
+                raise ValueError("No seed given for save-file.")
         else:
             np.random.seed(seed)
             if self.log is True:
@@ -355,20 +365,31 @@ class SWF:
             v = self.field_type(self.L_int[1], self.sigma[1])
             w = self.field_type(self.L_int[2], self.sigma[2])
             u = np.array([u, v, w])
+        if self.save in ['npy', 'bin']:
+            self.saving(u, seed)
         return u   
     
     def logger(self):
         """ Initialize a log-file and write wind field model parameters to .info-file."""
-        logging.basicConfig(filename=str(self.kind)+'.log', format='%(asctime)s %(levelname)s %(message)s',
+        logging.basicConfig(filename=str(self.kind)+'_V_hub_'+str(self.V_hub)+'.log', format='%(asctime)s %(levelname)s %(message)s',
                             filemode='w', level=logging.INFO, force=True)
-        logging.info('Instantiating SWF with parameters saved in: '+str(self.kind)+'.info') 
+        logging.info('Instantiating SWF with parameters saved in: '+ str(self.kind)+'_V_hub_'+str(self.V_hub)+'.info') 
 
         params = np.round(np.array([[self.L_int[0], self.L_int[1], self.L_int[2], self.sigma[0], self.sigma[1], 
                                      self.sigma[2], self.mu, self.V_hub, self.h_hub, self.H, self.T, self.range[1], 
                                      self.dim[0], self.dim[1], self.n_comp, self.tilde_L, self.tilde_T, self.N_xi]]),3)
-        params_str = ['L_int_x', 'L_int_y', 'L_int_z', 'sigma_x', 'sigma_y', 'sigma_z', 'mu', 'V_hub', 'h_hub'
+        params_str = ['L_int_x', 'L_int_y', 'L_int_z', 'sigma_x', 'sigma_y', 'sigma_z', 'mu', 'V_hub', 'h_hub',
                       'H', 'T', 'diameter', 'N_T', 'N_rotor', 'N_dim', 'tilde_L', 'tilde_T', 'N_xi']
         df = pd.DataFrame(params, columns=params_str)
-        df.to_csv(str(self.kind)+'.info', index=False)  
+        df.to_csv(str(self.kind)+'_V_hub_'+str(self.V_hub)+'.info', index=False)  
+
+    def saving(self, u, seed):
+        """ Saving of wind field to .npy or .bin file."""
+        if self.save in ['npy']:
+            np.save('u_'+self.kind+'_V_hub_'+str(self.V_hub)+'_seed_'+str(seed)+'.'+str(self.save), u)
+        else:
+            np.array(u, dtype='float32').tofile('u_'+self.kind+'_V_hub_'+str(self.V_hub)+'_seed_'+str(seed)+'.'+str(self.save))
+        logging.info('Saving wind field to file: u_'+self.kind+'_V_hub_'+str(self.V_hub)+'_seed_'+str(seed)+'.'+str(self.save))
+        
 
    
