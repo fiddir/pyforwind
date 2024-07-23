@@ -1,4 +1,4 @@
-fBb
+pyforwind
 ===
 
 An open-source package to generate synthetic IEC-conform wind fields with extended turbulence characteristics. 
