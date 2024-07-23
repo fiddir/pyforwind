@@ -6,7 +6,7 @@ fields with extended turbulence characteristics
 
 #Copyright (C) 2024 GNU LGPLv3, pyforwind 2024, J. Friedrich, D. Moreno, and J. Lengyel.
 #All rights reserved.
-#Contact: jan.friedrich@uni-oldenburg.de, aura.daniela.moreno.mora@uol.de, janka.lengyel@uol.de
+#Contact: jan.friedrich@uol.de, aura.daniela.moreno.mora@uol.de, janka.lengyel@uol.de
                                                                                                                                                                                                                                                                                                                                              
 import numpy as np                                                                                                                                                                                                                                                                                                                                                 
 import scipy                                                                                                                                                                   
@@ -33,8 +33,10 @@ class SWF:
     mu : float
         Intermittency coefficient that determines deviations from Gaussianity of wind field
         fluctuations.
-    V_hub: Wind speed at rotor hub.
-    h_hub: Hub height.
+    V_hub: float
+        Wind speed at rotor hub.
+    h_hub: float
+        Rotor hub height.
     range : (float, float)
         Length scales of wind field in the form (T, diam) where T is the temporal length of wind field
         and diam the extends in the rotor plane.
@@ -357,15 +359,14 @@ class SWF:
     
     def logger(self):
         """ Initialize a log-file and write wind field model parameters to .info-file."""
-
         logging.basicConfig(filename=str(self.kind)+'.log', format='%(asctime)s %(levelname)s %(message)s',
                             filemode='w', level=logging.INFO, force=True)
         logging.info('Instantiating SWF with parameters saved in: '+str(self.kind)+'.info') 
 
         params = np.round(np.array([[self.L_int[0], self.L_int[1], self.L_int[2], self.sigma[0], self.sigma[1], 
-                                     self.sigma[2], self.mu, self.V_hub, self.H, self.T, self.range[1], self.dim[0], 
-                                     self.dim[1], self.n_comp, self.tilde_L, self.tilde_T, self.N_xi]]),3)
-        params_str = ['L_int_x', 'L_int_y', 'L_int_z', 'sigma_x', 'sigma_y', 'sigma_z', 'mu', 'V_hub', 
+                                     self.sigma[2], self.mu, self.V_hub, self.h_hub, self.H, self.T, self.range[1], 
+                                     self.dim[0], self.dim[1], self.n_comp, self.tilde_L, self.tilde_T, self.N_xi]]),3)
+        params_str = ['L_int_x', 'L_int_y', 'L_int_z', 'sigma_x', 'sigma_y', 'sigma_z', 'mu', 'V_hub', 'h_hub'
                       'H', 'T', 'diameter', 'N_T', 'N_rotor', 'N_dim', 'tilde_L', 'tilde_T', 'N_xi']
         df = pd.DataFrame(params, columns=params_str)
         df.to_csv(str(self.kind)+'.info', index=False)  
