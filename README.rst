@@ -18,8 +18,8 @@ How to use this package
 Generate a superstatistical Kaimal wind field with non-Gaussian wind field fluctuations.
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-To use ``pyforwind`` to generate a Kaimal wind field and its superstatistical (i.e., non-Gaussian)
-extension import the ``SFW`` with the model parameters: integral length scale ``L``, intermittency coefficient ``mu``,
+To use ``pyforwind`` to generate a Kaimal wind field ``u_kaimal`` and its superstatistical (i.e., non-Gaussian)
+extension ``u_super_kaimal``, import the ``SFW`` with the model parameters: integral length scale ``L``, intermittency coefficient ``mu``,
 horizontal wind speed at rotor hub ``V_hub``, hub height ``h_hub``, time length and diameter ``(T, diam)``, resolution ``(N_T, N_rotor)``,
 and the wind field type ``kind``.
 
