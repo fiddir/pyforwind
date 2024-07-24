@@ -15,8 +15,8 @@ The ``pyforwind`` package is available on pypi and can be installed using pip
 How to use this package
 -----------------------
 
-Generate a superstatistical Kaimal wind field with non-Gaussian wind field fluctuations
-~~~~~~~~~~~~~~~~~~~~~~~~
+Generate superstatistical Kaimal wind field
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 To use ``pyforwind`` to generate a Kaimal wind field ``u_kaimal`` and its superstatistical (i.e., non-Gaussian)
 extension ``u_super_kaimal``, import the ``SFW`` with the model parameters: integral length scale ``L``, intermittency coefficient ``mu``,
