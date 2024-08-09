@@ -66,6 +66,9 @@ class SWF:
         (convergence check might be appropriate)
     full_vector: 
         If True, longitudinal, lateral, and upward Kaimal wind field components will be generated. 
+    corr_spec:
+        If True, the kinetic energy spectrum will be corrected to exactly reproduce the Gaussian one, i.e.,
+        without intermittency corrections.
     log:
         Write parameter list to .info file and logging.
     save: 
