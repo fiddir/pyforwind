@@ -191,8 +191,9 @@ class SWF:
             The Fourier transform of the re-scaled temporal Kaimal correlations, i.e., a
             re-scaled spectrum.
         """
-
-        T_rescaled = np.where(self.t==0., 0.,  np.array(xi**np.sqrt(self.mu*np.log(self.tilde_T/(self.t)))
+        
+        with np.errstate(divide='ignore', invalid='ignore'):
+            T_rescaled = np.where(self.t==0., 0.,  np.array(xi**np.sqrt(self.mu*np.log(self.tilde_T/(self.t)))
                                                         *(self.t/self.tilde_T)**(self.mu/2)*self.t))
         rescaled_int = np.array(T_rescaled/self.dt, dtype='int')
         if rescaled_int.max() < self.N_x//2-1:
@@ -284,7 +285,7 @@ class SWF:
         for xx in range(self.N_xi):
             xi = xi_array[xx]
             if self.kind in ['spatial', 'spatiotemporal']:
-                with np.errstate(divide='ignore'):
+                with np.errstate(divide='ignore', invalid='ignore'):
                     R = np.where(self.R_ij==0., 0., np.array(xi**np.sqrt(self.mu*np.log(self.tilde_L/(self.R_ij)))
                                                              *(self.R_ij/self.tilde_L)**(self.mu/2)*self.R_ij))
             if self.kind in ['temporal', 'spatiotemporal']:
