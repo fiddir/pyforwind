@@ -31,7 +31,9 @@ and the wind field type ``kind``.
     swf_super_kaimal = SWF(L, mu, V_hub, h_hub, (T, diam), (N_T, N_rotor), kind='spatiotemporal')
     u_kaimal = swf_kaimal.field(seed)
     u_super_kaimal = swf_super_kaimal.field(seed)
-
+References
+----------
+Friedrich, J., Moreno, D., Sinhuber, M., Wächter, M., & Peinke, J. (2022). Superstatistical wind fields from pointwise atmospheric turbulence measurements. PRX Energy, 1(2), 023006.
 Acknowledgments
 ---------------
 This project is funded by the European Union Horizon Europe Framework program (HORIZON-CL5-2021-D3-03-04) under grant agreement no. 101084205, and by the German Federal Ministry for Economic Affairs and Energy in the scope of the projects EMUwind (03EE2031A/C) and PASTA (03EE2024A/B).
