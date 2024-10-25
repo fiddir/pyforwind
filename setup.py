@@ -5,7 +5,7 @@ with open("README.rst", "r") as fh:
 
 setuptools.setup(
     name="pyforwind",
-    version="0.1.0",
+    version="0.1.2",
     description="Synthetic IEC-conform wind fields with extended turbulence characteristics",
     long_description= long_description,
     maintainer = "Jan Friedrich",
