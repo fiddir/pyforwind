@@ -377,12 +377,13 @@ class SWF:
                             filemode='w', level=logging.INFO, force=True)
         logging.info('Instantiating SWF with parameters saved in: '+ str(self.kind)+'_V_hub_'+str(self.V_hub)+'.info') 
 
-        params = np.round(np.array([[self.L_int[0], self.L_int[1], self.L_int[2], self.sigma[0], self.sigma[1], 
+        params = np.round(np.array([self.L_int[0], self.L_int[1], self.L_int[2], self.sigma[0], self.sigma[1], 
                                      self.sigma[2], self.mu, self.V_hub, self.h_hub, self.H, self.T, self.range[1], 
-                                     self.dim[0], self.dim[1], self.n_comp, self.tilde_L, self.tilde_T, self.N_xi]]),3)
+                                     self.dim[0], self.dim[1], self.n_comp, self.tilde_L, self.tilde_T, self.N_xi]),3)
+        print(params.shape)
         params_str = ['L_int_x', 'L_int_y', 'L_int_z', 'sigma_x', 'sigma_y', 'sigma_z', 'mu', 'V_hub', 'h_hub',
                       'H', 'T', 'diameter', 'N_T', 'N_rotor', 'N_dim', 'tilde_L', 'tilde_T', 'N_xi']
-        df = pd.DataFrame(params, columns=params_str)
+        df = pd.DataFrame([params], columns=params_str)
         df.to_csv(str(self.kind)+'_V_hub_'+str(self.V_hub)+'.info', index=False)  
 
     def saving(self, u, seed):
